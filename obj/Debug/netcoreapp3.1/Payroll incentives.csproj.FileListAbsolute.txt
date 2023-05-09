@@ -1,0 +1,11 @@
+C:\Users\anubo\source\repos\Payroll incentives\bin\Debug\netcoreapp3.1\Payroll incentives.exe
+C:\Users\anubo\source\repos\Payroll incentives\bin\Debug\netcoreapp3.1\Payroll incentives.deps.json
+C:\Users\anubo\source\repos\Payroll incentives\bin\Debug\netcoreapp3.1\Payroll incentives.runtimeconfig.json
+C:\Users\anubo\source\repos\Payroll incentives\bin\Debug\netcoreapp3.1\Payroll incentives.runtimeconfig.dev.json
+C:\Users\anubo\source\repos\Payroll incentives\bin\Debug\netcoreapp3.1\Payroll incentives.dll
+C:\Users\anubo\source\repos\Payroll incentives\bin\Debug\netcoreapp3.1\Payroll incentives.pdb
+C:\Users\anubo\source\repos\Payroll incentives\obj\Debug\netcoreapp3.1\Payroll incentives.csprojAssemblyReference.cache
+C:\Users\anubo\source\repos\Payroll incentives\obj\Debug\netcoreapp3.1\Payroll incentives.AssemblyInfoInputs.cache
+C:\Users\anubo\source\repos\Payroll incentives\obj\Debug\netcoreapp3.1\Payroll incentives.AssemblyInfo.cs
+C:\Users\anubo\source\repos\Payroll incentives\obj\Debug\netcoreapp3.1\Payroll incentives.dll
+C:\Users\anubo\source\repos\Payroll incentives\obj\Debug\netcoreapp3.1\Payroll incentives.pdb
