@@ -25,7 +25,7 @@ namespace Payroll_incentives
                 HashSet<Guid> shiftIdsTried = new HashSet<Guid>();
 
                 //distribute to primary shift
-                int amountToDistribute = Shift.GetAmountToDistribute(primaryShiftToDistributeTo.Incentive, incentive, distributionRules);
+                int amountToDistribute = Shift.GetIncentiveToDistribute(primaryShiftToDistributeTo.Incentive, incentive, distributionRules, primaryShiftToDistributeTo.HoursWorked);
                 if (amountToDistribute == 0)
                 {
                     result.Errors.Add("There is nothing we can distribute based on the rules");
@@ -43,7 +43,7 @@ namespace Payroll_incentives
                             bool shiftProcessed = shiftIdsTried.Contains(shift.Id);
                             if (!shiftProcessed)
                             {
-                                int shiftAmountToDistribute = Shift.GetAmountToDistribute(shift.Incentive, amountLeftToDistribute, distributionRules);
+                                int shiftAmountToDistribute = Shift.GetIncentiveToDistribute(shift.Incentive, amountLeftToDistribute, distributionRules, shift.HoursWorked);
                                 if (shiftAmountToDistribute == 0)
                                 {
                                     result.Errors.Add("There is nothing we can distribute based on the rules");
@@ -117,7 +117,7 @@ namespace Payroll_incentives
         }
         public DateTime Start { get; set; }
         public DateTime End { get; set; }
-        public double HoursWorked
+        public decimal HoursWorked
         {
             get
             {
@@ -130,58 +130,45 @@ namespace Payroll_incentives
                     throw new ApplicationException("There isn't a end set for the shift");
                 }
 
-                return (End - Start).TotalHours;
+                return Convert.ToDecimal((End - Start).TotalHours);
             }
         }
         public int Incentive { get; set; }
         public int DistributedIncentive { get; set; }
         #region methods        
 
-        public static int GetAmountToDistribute(int existingIncentive, int amountLeftToDistribute, DistributionRules distributionRules)
+        public static int GetIncentiveToDistribute(int existingIncentive, decimal amountLeftToDistribute, DistributionRules distributionRules, decimal hoursWorked)
         {
             int result = 0;
 
-            if (amountLeftToDistribute == 0)
+            if (amountLeftToDistribute == 0 || hoursWorked == 0 //nothing to distribute
+                || amountLeftToDistribute < distributionRules.MinIncentivePerShift)//The amount to distribute is below the miniumum allowed
             {
                 return 0;
             }
-            else if (amountLeftToDistribute < distributionRules.MinIncentivePerShift)
+
+            decimal maxPotentialIncentive = amountLeftToDistribute / hoursWorked;            
+            if (maxPotentialIncentive < distributionRules.MinIncentivePerShift)
             {
-                return 0;//The amount to distribute is below the miniumum allowed
+                return 0;
+            }
+            
+            if (maxPotentialIncentive > distributionRules.MaxIncentivePerShift)
+            {
+                maxPotentialIncentive = distributionRules.MaxIncentivePerShift;
+            }
+            maxPotentialIncentive = maxPotentialIncentive - existingIncentive;
+            if (maxPotentialIncentive > distributionRules.MaxIncentivePerShift)
+            {
+                maxPotentialIncentive = distributionRules.MaxIncentivePerShift;
             }
 
-            if (amountLeftToDistribute <= distributionRules.MaxIncentivePerShift && amountLeftToDistribute >= distributionRules.MinIncentivePerShift)
+            if (maxPotentialIncentive <=0 || maxPotentialIncentive < distributionRules.MinIncentivePerShift)
             {
-                result = amountLeftToDistribute;
+                maxPotentialIncentive = 0;
             }
-            if(amountLeftToDistribute > distributionRules.MinIncentivePerShift && amountLeftToDistribute > distributionRules.MaxIncentivePerShift)
-            {
-                int amountToTry = distributionRules.DistributionInterval;
-                if(amountToTry == amountLeftToDistribute)
-                {
-                    result = amountToTry;
-                }
-                else
-                {
-                    int tries = 0;
-                    do
-                    {
-                        tries++;
-                        if (tries > 1000)//prevent infinite loop
-                        {
-                            throw new Exception("Tried too many attempts to get the amount to distribute");
-                        }
-                        amountToTry += distributionRules.DistributionInterval;
-                        if (amountToTry > distributionRules.MaxIncentivePerShift || amountToTry > amountLeftToDistribute)
-                        {
-                            amountToTry -= distributionRules.DistributionInterval;
-                            break;
-                        }
-                    }
-                    while (amountToTry < amountLeftToDistribute && amountToTry < distributionRules.MaxIncentivePerShift);
-                    result = amountToTry;
-                }
-            }
+
+            result = Convert.ToInt32(Math.Floor(maxPotentialIncentive));
 
             return result;
         }
