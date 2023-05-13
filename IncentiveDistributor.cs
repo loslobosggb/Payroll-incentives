@@ -1,9 +1,10 @@
 ﻿using System;
 using System.Collections.Generic;
 using System.Text;
+using System.Linq;
 
 namespace Payroll_incentives
-{    
+{
     public static class IncentiveDistributor
     {
         /// <summary>
@@ -24,8 +25,9 @@ namespace Payroll_incentives
                 int amountDistributed = 0;
                 HashSet<Guid> shiftIdsTried = new HashSet<Guid>();
 
-                //distribute to primary shift
-                int amountToDistribute = Shift.GetIncentiveToDistribute(primaryShiftToDistributeTo.Incentive, incentive, distributionRules, primaryShiftToDistributeTo.HoursWorked);
+                //distribute to primary shift                
+                decimal incentiveAmount = incentive * primaryShiftToDistributeTo.HoursWorked;
+                int amountToDistribute = Shift.GetIncentiveToDistribute(primaryShiftToDistributeTo.AllIncentives, incentiveAmount, distributionRules, primaryShiftToDistributeTo.HoursWorked);
                 if (amountToDistribute == 0)
                 {
                     result.Errors.Add("There is nothing we can distribute based on the rules");
@@ -43,7 +45,7 @@ namespace Payroll_incentives
                             bool shiftProcessed = shiftIdsTried.Contains(shift.Id);
                             if (!shiftProcessed)
                             {
-                                int shiftAmountToDistribute = Shift.GetIncentiveToDistribute(shift.Incentive, amountLeftToDistribute, distributionRules, shift.HoursWorked);
+                                int shiftAmountToDistribute = Shift.GetIncentiveToDistribute(shift.AllIncentives, amountLeftToDistribute, distributionRules, shift.HoursWorked);
                                 if (shiftAmountToDistribute == 0)
                                 {
                                     result.Errors.Add("There is nothing we can distribute based on the rules");
@@ -73,12 +75,12 @@ namespace Payroll_incentives
                     }
                 }
             }
-            catch(ApplicationException ex)
+            catch (ApplicationException ex)
             {
                 result = new DistributionResult { Errors = result.Errors };
                 result.Errors.Insert(0, ex.Message);
             }
-            catch(Exception ex)
+            catch (Exception ex)
             {
                 result = new DistributionResult { Errors = result.Errors };
                 result.Errors.Insert(0, ex.Message);
@@ -102,6 +104,12 @@ namespace Payroll_incentives
 
     public class Shift
     {
+        public Shift() { }
+        public Shift(DateTime startUtc, double durationInHours)
+        {
+            Start = startUtc;
+            End = Start.AddHours(durationInHours);
+        }
         private Guid? _Id;
         public Guid Id
         {
@@ -121,7 +129,7 @@ namespace Payroll_incentives
         {
             get
             {
-                if(Start == DateTime.MinValue)
+                if (Start == DateTime.MinValue)
                 {
                     throw new ApplicationException("There isn't a start set for the shift");
                 }
@@ -135,24 +143,26 @@ namespace Payroll_incentives
         }
         public int Incentive { get; set; }
         public int DistributedIncentive { get; set; }
+        public int AllIncentives { get => Incentive + DistributedIncentive; }
         #region methods        
 
-        public static int GetIncentiveToDistribute(int existingIncentive, decimal amountLeftToDistribute, DistributionRules distributionRules, decimal hoursWorked)
+        public static int GetIncentiveToDistribute(int existingIncentive, decimal amountLeftToDistribute, DistributionRules distributionRules, decimal hours)
         {
             int result = 0;
 
-            if (amountLeftToDistribute == 0 || hoursWorked == 0 //nothing to distribute
+            if (amountLeftToDistribute == 0 || hours == 0 //nothing to distribute
                 || amountLeftToDistribute < distributionRules.MinIncentivePerShift)//The amount to distribute is below the miniumum allowed
             {
                 return 0;
             }
 
-            decimal maxPotentialIncentive = amountLeftToDistribute / hoursWorked;            
+            decimal paidHours = distributionRules.CalculatePaidHoursWorked(hours);
+            decimal maxPotentialIncentive = distributionRules.GetIncentive(amountLeftToDistribute, paidHours);
             if (maxPotentialIncentive < distributionRules.MinIncentivePerShift)
             {
                 return 0;
             }
-            
+
             if (maxPotentialIncentive > distributionRules.MaxIncentivePerShift)
             {
                 maxPotentialIncentive = distributionRules.MaxIncentivePerShift;
@@ -163,7 +173,7 @@ namespace Payroll_incentives
                 maxPotentialIncentive = distributionRules.MaxIncentivePerShift;
             }
 
-            if (maxPotentialIncentive <=0 || maxPotentialIncentive < distributionRules.MinIncentivePerShift)
+            if (maxPotentialIncentive <= 0 || maxPotentialIncentive < distributionRules.MinIncentivePerShift)
             {
                 maxPotentialIncentive = 0;
             }
@@ -186,27 +196,42 @@ namespace Payroll_incentives
         public DistributionRules(int maxIncentivePerShift)
         {
             MaxIncentivePerShift = maxIncentivePerShift;
+            IncentiveOptions = new HashSet<decimal>();
         }
         public int MinIncentivePerShift { get; set; }
         public int MaxIncentivePerShift { get; set; }
-        private int _DistributionInterval = 1;
+        HashSet<decimal> IncentiveOptions { get; set; }
+        public int BreakDurationInMinutes { get; set; }
         /// <summary>
-        /// The amount to try to distribute by
+        /// After the specified hours worked, presume a break is taken.  ie if 5 and someone worked 5hrs, they are presumed to have had a break.  If a 30min break, then the paid hours would be 4.5hours
         /// </summary>
-        public int DistributionInterval
+        public decimal BreakAfterHoursWorked { get; set; }
+
+        public decimal GetIncentive(decimal amountLeftToDistribute, decimal hours)
         {
-            get
-            {                
-                return _DistributionInterval;
-            }
-            set
+            decimal incentive = amountLeftToDistribute / hours;
+            var orderedIncentiveOptions = IncentiveOptions.OrderByDescending(o => o);
+
+            decimal maxIncentive = orderedIncentiveOptions.First(o => o <= incentive);//get the highest incentive option less than or = the incentive
+
+            return maxIncentive;
+        }
+
+        public decimal CalculatePaidHoursWorked(decimal hours)
+        {
+            decimal paidMInutes = hours * 60;
+            if (BreakAfterHoursWorked > 0 && BreakDurationInMinutes > 0)
             {
-                if (value > MaxIncentivePerShift)
+                decimal breakAfterMinutesWorked = BreakAfterHoursWorked * 60;
+                if(paidMInutes >= breakAfterMinutesWorked)
                 {
-                    throw new Exception($"The interval cannot be more than the max");
+                    paidMInutes = paidMInutes - breakAfterMinutesWorked;
                 }
-                _DistributionInterval = value;
             }
+
+            decimal paidHours = paidMInutes / 60;
+
+            return paidHours;
         }
     }
 
