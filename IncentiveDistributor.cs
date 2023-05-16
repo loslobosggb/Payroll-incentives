@@ -158,7 +158,19 @@ namespace Payroll_incentives
             int maxPotentialIncentive = distributionRules.GetIncentive(amountLeftToDistribute, paidHours);
             if(existingIncentive > 0)
             {
-                maxPotentialIncentive = distributionRules.IncentiveOptions.OrderByDescending(o => o).FirstOrDefault(o => existingIncentive + o <= maxPotentialIncentive);
+                int maxIncentiveOption = distributionRules.IncentiveOptions.Max(o => o);
+                foreach(int incentiveOption in distributionRules.IncentiveOptions.OrderByDescending(o => o))
+                {
+                    int totalIncentive = existingIncentive + maxPotentialIncentive;
+                    if(totalIncentive <= maxIncentiveOption)
+                    {
+                        break;
+                    }
+                    else
+                    {
+                        maxPotentialIncentive = distributionRules.IncentiveOptions.OrderByDescending(o => o).FirstOrDefault(o => o < incentiveOption);
+                    }
+                }
             }
             
             result = maxPotentialIncentive;
